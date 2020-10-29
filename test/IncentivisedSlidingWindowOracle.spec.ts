@@ -30,6 +30,8 @@ describe.only('IncentivisedSlidingWindowOracle', () => {
   let token1: Contract
   let pair: Contract
   let weth: Contract
+  let wethPartner: Contract
+  let wethPair: Contract
   let factory: Contract
   let incentiveToken: Contract
 
@@ -37,11 +39,20 @@ describe.only('IncentivisedSlidingWindowOracle', () => {
     if (!amount0.isZero()) await token0.transfer(pair.address, amount0)
     if (!amount1.isZero()) await token1.transfer(pair.address, amount1)
     await pair.sync()
+
+    if (!amount1.isZero()) await wethPartner.transfer(pair.address, amount1)
+    await wethPair.sync()
   }
 
+  const oneHundredPercent = expandTo18Decimals(1)
+  const incentiveTokenTotalSupply = expandTo18Decimals(10000)
   const percentIncentivePerCall = bigNumberify(10).pow(16) // 1%
   const defaultWindowSize = 86400 // 24 hours
   const defaultGranularity = 24 // 1 hour each
+
+  const percentOfValue = (value: any, percent: any) => {
+    return value.mul(percent).div(oneHundredPercent)
+  }
 
   function observationIndexOf(
     timestamp: number,
@@ -64,9 +75,11 @@ describe.only('IncentivisedSlidingWindowOracle', () => {
     token1 = fixture.token1
     pair = fixture.pair
     weth = fixture.WETH
+    wethPartner = fixture.WETHPartner
+    wethPair = fixture.WETHPair
     factory = fixture.factoryV2
 
-    incentiveToken = await deployContract(wallet, ERC20, [expandTo18Decimals(10000)])
+    incentiveToken = await deployContract(wallet, ERC20, [incentiveTokenTotalSupply])
   })
 
   // 1/1/2020 @ 12:00 am UTC
@@ -125,6 +138,37 @@ describe.only('IncentivisedSlidingWindowOracle', () => {
     })
   })
 
+  describe('#canUpdate', () => {
+    let slidingWindowOracle: Contract
+
+    beforeEach('deploy oracle', async () => {
+      slidingWindowOracle = await deployOracle(defaultWindowSize, defaultGranularity)
+      await addLiquidity()
+    })
+
+    it('returns true before having updated', async () => {
+      const canUpate = await slidingWindowOracle.canUpdate(token0.address, token1.address)
+      expect(canUpate).to.be.true
+    })
+
+    it('returns true after having updated and observation window passed', async () => {
+      await slidingWindowOracle.update(token0.address, token1.address, overrides)
+      await mineBlock(provider, startTime + 3600)
+
+      const canUpate = await slidingWindowOracle.canUpdate(token0.address, token1.address)
+
+      expect(canUpate).to.be.true
+    })
+
+    it('returns false after having updated', async () => {
+      await slidingWindowOracle.update(token0.address, token1.address, overrides)
+
+      const canUpate = await slidingWindowOracle.canUpdate(token0.address, token1.address)
+
+      expect(canUpate).to.be.false
+    })
+  })
+
   describe('#update', () => {
     let slidingWindowOracle: Contract
 
@@ -139,9 +183,29 @@ describe.only('IncentivisedSlidingWindowOracle', () => {
       await slidingWindowOracle.update(token0.address, token1.address, overrides)
     })
 
-    it('sets the appropriate epoch slot', async () => {
+    it('sends incentive to sender when using specified pair', async () => {
+      await incentiveToken.transfer(slidingWindowOracle.address, expandTo18Decimals(1))
+      const senderBalanceBefore = await incentiveToken.balanceOf(await wallet.getAddress())
+
+      await slidingWindowOracle.update(token1.address, token0.address, overrides)
+
+      const senderBalanceAfter = await incentiveToken.balanceOf(await wallet.getAddress())
+      expect(senderBalanceAfter).to.eq(senderBalanceBefore.add(percentOfValue(expandTo18Decimals(1), percentIncentivePerCall)))
+    })
+
+    it('does not send incentive to sender when using unspecified pair', async () => {
+      await incentiveToken.transfer(slidingWindowOracle.address, expandTo18Decimals(1))
+      const senderBalanceBefore = await incentiveToken.balanceOf(await wallet.getAddress())
+
+      await slidingWindowOracle.update(wethPartner.address, weth.address, overrides)
+
+      const senderBalanceAfter = await incentiveToken.balanceOf(await wallet.getAddress())
+      expect(senderBalanceAfter).to.eq(senderBalanceBefore)
+    })
+
+    it.only('sets the appropriate epoch slot', async () => {
       const blockTimestamp = (await pair.getReserves())[2]
-      expect(blockTimestamp).to.eq(startTime)
+      expect(blockTimestamp).is.closeTo(startTime, 2)
       await slidingWindowOracle.update(token0.address, token1.address, overrides)
       expect(await slidingWindowOracle.pairObservations(pair.address, observationIndexOf(blockTimestamp))).to.deep.eq([
         bigNumberify(blockTimestamp),
@@ -154,7 +218,7 @@ describe.only('IncentivisedSlidingWindowOracle', () => {
     it('gas for first update (allocates empty array)', async () => {
       const tx = await slidingWindowOracle.update(token0.address, token1.address, overrides)
       const receipt = await tx.wait()
-      expect(receipt.gasUsed).to.eq('119687')
+      expect(receipt.gasUsed).to.eq('128225')
     }).retries(2) // gas test inconsistent
 
     it('reverts when second update in the same period', async () => {
@@ -169,7 +233,7 @@ describe.only('IncentivisedSlidingWindowOracle', () => {
       await mineBlock(provider, startTime + 3600)
       const tx = await slidingWindowOracle.update(token0.address, token1.address, overrides)
       const receipt = await tx.wait()
-      expect(receipt.gasUsed).to.eq('97419')
+      expect(receipt.gasUsed).to.eq('105960')
     }).retries(2) // gas test inconsistent
 
     it('reverts when second update at end of timeslot', async () => {

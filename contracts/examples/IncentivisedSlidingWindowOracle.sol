@@ -72,6 +72,10 @@ contract IncentivisedSlidingWindowOracle {
         return incentiveToken.balanceOf(address(this));
     }
 
+    function updateIncentiveAmount() public view returns (uint256) {
+        return incentiveTokenBalance().mul(percentIncentivePerCall) / ONE_HUNDRED_PERCENT;
+    }
+
     // returns the index of the observation corresponding to the given timestamp
     function observationIndexOf(uint timestamp) public view returns (uint8 index) {
         uint epochPeriod = timestamp / periodSize;
@@ -86,14 +90,17 @@ contract IncentivisedSlidingWindowOracle {
         firstObservation = pairObservations[pair][firstObservationIndex];
     }
 
-    // TODO: Is this accurate before calling update() for the first time?
     function canUpdate(address tokenA, address tokenB) external view returns (bool) {
         address pair = UniswapV2Library.pairFor(factory, tokenA, tokenB);
         uint8 observationIndex = observationIndexOf(block.timestamp);
-        Observation storage observation = pairObservations[pair][observationIndex];
 
-        uint timeElapsed = block.timestamp - observation.timestamp;
-        return timeElapsed > periodSize;
+        if (pairObservations[pair].length > 0) {
+            Observation storage observation = pairObservations[pair][observationIndex];
+            uint timeElapsed = block.timestamp - observation.timestamp;
+            return timeElapsed > periodSize;
+        } else {
+            return true;
+        }
     }
 
     // update the cumulative price for the observation at the current timestamp. each observation is updated at most
@@ -119,9 +126,8 @@ contract IncentivisedSlidingWindowOracle {
         observation.price0Cumulative = price0Cumulative;
         observation.price1Cumulative = price1Cumulative;
 
-        if (incentiveTokenBalance() > percentIncentivePerCall && pair == incentivisedPair) {
-            uint256 incentiveAmount = incentiveToken.balanceOf(address(this)).mul(percentIncentivePerCall) / ONE_HUNDRED_PERCENT;
-            incentiveToken.transfer(msg.sender, incentiveAmount);
+        if (pair == incentivisedPair) {
+            incentiveToken.transfer(msg.sender, updateIncentiveAmount());
         }
     }
 
