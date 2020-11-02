@@ -8,6 +8,7 @@ import '../libraries/SafeMath.sol';
 import '../interfaces/IERC20.sol';
 import '../libraries/UniswapV2Library.sol';
 import '../libraries/UniswapV2OracleLibrary.sol';
+import './ICourt.sol';
 
 // sliding window oracle that uses observations collected over a window to provide moving price averages in the past
 // `windowSize` with a precision of `windowSize / granularity`
@@ -42,6 +43,10 @@ contract IncentivisedSlidingWindowOracle {
     IERC20 public immutable incentiveToken;
     uint256 public immutable percentIncentivePerCall;
     address public incentivisedPair;
+    ICourt public court;
+    address public courtFeeToken;
+    address public courtStableToken;
+    uint256[3] public courtStableValueFees;
 
     // mapping from pair address to a list of price observations of that pair
     mapping(address => Observation[]) public pairObservations;
@@ -52,7 +57,11 @@ contract IncentivisedSlidingWindowOracle {
         uint8 granularity_,
         IERC20 incentiveToken_,
         uint256 percentIncentivePerCall_,
-        address incentivisedPair_
+        address incentivisedPair_,
+        ICourt court_,
+        address courtFeeToken_,
+        address courtStableToken_,
+        uint256[3] memory courtStableValueFees_
     ) public {
         require(granularity_ > 1, 'SlidingWindowOracle: GRANULARITY');
         require(
@@ -66,6 +75,10 @@ contract IncentivisedSlidingWindowOracle {
         incentiveToken = incentiveToken_;
         percentIncentivePerCall = percentIncentivePerCall_;
         incentivisedPair = incentivisedPair_;
+        court = court_;
+        courtFeeToken = courtFeeToken_;
+        courtStableToken = courtStableToken_;
+        courtStableValueFees = courtStableValueFees_;
     }
 
     function incentiveTokenBalance() public view returns (uint256) {
@@ -134,7 +147,7 @@ contract IncentivisedSlidingWindowOracle {
     // returns the amount out corresponding to the amount in for a given token using the moving average over the time
     // range [now - [windowSize, windowSize - periodSize * 2], now]
     // update must have been called for the bucket corresponding to timestamp `now - windowSize`
-    function consult(address tokenIn, uint amountIn, address tokenOut) external view returns (uint amountOut) {
+    function consult(address tokenIn, uint amountIn, address tokenOut) public view returns (uint amountOut) {
         address pair = UniswapV2Library.pairFor(factory, tokenIn, tokenOut);
         Observation storage firstObservation = getFirstObservationInWindow(pair);
 
@@ -164,5 +177,34 @@ contract IncentivisedSlidingWindowOracle {
             uint224((priceCumulativeEnd - priceCumulativeStart) / timeElapsed)
         );
         amountOut = priceAverage.mul(amountIn).decode144();
+    }
+
+    /**
+    * @notice Convert the court fees from their stable value to the fee token value and update the court config with them
+    *   This function can be called any number of times during a court term, the closer to the start of the following term
+    *   the more accurate the configured fees will be.
+    */
+    function updateCourtFees() external {
+        uint64 currentTerm = court.ensureCurrentTerm();
+
+        // We use the latest possible term to ensure that if the config has been updated by an account other
+        // than this oracle, the config fetched will be the updated one. However, this does mean that a config update
+        // that is scheduled for a future term will be scheduled for the next term instead.
+        uint64 latestPossibleTerm = uint64(-1);
+        (address feeToken,,
+        uint64[5] memory roundStateDurations,
+        uint16[2] memory pcts,
+        uint64[4] memory roundParams,
+        uint256[2] memory appealCollateralParams,
+        uint256[3] memory jurorsParams
+        ) = court.getConfig(latestPossibleTerm);
+
+        uint256[3] memory convertedFees;
+        convertedFees[0] = consult(courtStableToken, courtStableValueFees[0], courtFeeToken);
+        convertedFees[1] = consult(courtStableToken, courtStableValueFees[1], courtFeeToken);
+        convertedFees[2] = consult(courtStableToken, courtStableValueFees[2], courtFeeToken);
+
+        court.setConfig(currentTerm + 1, feeToken, convertedFees, roundStateDurations, pcts, roundParams,
+            appealCollateralParams, jurorsParams);
     }
 }

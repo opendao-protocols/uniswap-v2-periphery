@@ -1,6 +1,6 @@
 {
   "name": "@1hive/uniswap-price-oracle",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Incentivised Uniswap price oracle for 1hive, includes Uniswap periphery contracts",
   "engines": {
     "node": ">=10"
