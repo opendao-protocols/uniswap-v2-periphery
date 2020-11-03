@@ -1,6 +1,6 @@
 {
   "name": "@1hive/uniswap-price-oracle",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Incentivised Uniswap price oracle for 1hive, includes Uniswap periphery contracts",
   "engines": {
     "node": ">=10"
@@ -32,7 +32,7 @@
     "solc": "0.6.6",
     "ts-node": "^8.5.4",
     "typescript": "^3.7.3",
-    "truffle": "^5.1.42"
+    "truffle": "^5.1.42",
   },
   "scripts": {
     "lint": "yarn prettier ./test/*.ts --check",

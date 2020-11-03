@@ -18,23 +18,46 @@
  *
  */
 
-const HDWalletProvider = require('@truffle/hdwallet-provider');
-// const infuraKey = "fj4jll3k.....";
-//
-// const fs = require('fs');
-// const mnemonic = fs.readFileSync(".secret").toString().trim();
+const HDWalletProvider = require("@truffle/hdwallet-provider");
+const homedir = require("os").homedir;
+const path = require("path");
+
+const DEFAULT_MNEMONIC =
+  "explain tackle mirror kit van hammer degree position ginger unfair soup bonus";
+
+const defaultRPC = network => `https://${network}.eth.aragon.network`;
+
+const configFilePath = filename => path.join(homedir(), `.aragon/${filename}`);
+
+const mnemonic = () => {
+  try {
+    return require(configFilePath("mnemonic.json")).mnemonic;
+  } catch (e) {
+    return DEFAULT_MNEMONIC;
+  }
+};
+
+const settingsForNetwork = network => {
+  try {
+    return require(configFilePath(`${network}_key.json`));
+  } catch (e) {
+    return {};
+  }
+};
+
+// Lazily loaded provider
+const providerForNetwork = network => () => {
+  let { rpc, keys } = settingsForNetwork(network);
+  rpc = rpc || defaultRPC(network);
+
+  if (!keys || keys.length === 0) {
+    return new HDWalletProvider(mnemonic(), rpc);
+  }
+
+  return new HDWalletProvider(keys, rpc);
+};
 
 module.exports = {
-  /**
-   * Networks define how you connect to your ethereum client and let you set the
-   * defaults web3 uses to send transactions. If you don't specify one truffle
-   * will spin up a development blockchain for you on port 9545 when you
-   * run `develop` or `test`. You can ask a truffle command to use a specific
-   * network from the command line, e.g
-   *
-   * $ truffle test --network <network-name>
-   */
-
   networks: {
     // Useful for testing. The `development` name is special - truffle uses it by default
     // if it's defined here and no other network is specified at the command line.
@@ -57,6 +80,14 @@ module.exports = {
       gas: 10000000,
       gasPrice: 1000000000
     },
+    rinkeby: {
+      network_id: 4,
+      provider: providerForNetwork("rinkeby"),
+      gas: 6.9e6,
+      gasPrice: 15000000001,
+      skipDryRun: false     // Skip dry run before migrations? (default: false for public nets )
+    },
+
     // Another network with more advanced options...
     // advanced: {
     // port: 8777,             // Custom port
