@@ -65,9 +65,7 @@ describe.only('IncentivisedSlidingWindowOracle', () => {
   }
 
   async function deployOracle(windowSize: number, granularity: number) {
-    return deployContract(wallet, ExampleSlidingWindowOracle, [factory.address, windowSize, granularity,
-      incentiveToken.address, percentIncentivePerCall, pair.address, wallet.address, wallet.address, wallet.address,
-      [0, 0, 0]], overrides)
+    return deployContract(wallet, ExampleSlidingWindowOracle, [factory.address, windowSize, granularity, incentiveToken.address, percentIncentivePerCall, pair.address], overrides)
   }
 
   beforeEach('deploy fixture', async function() {
@@ -205,7 +203,7 @@ describe.only('IncentivisedSlidingWindowOracle', () => {
       expect(senderBalanceAfter).to.eq(senderBalanceBefore)
     })
 
-    it('sets the appropriate epoch slot', async () => {
+    it.only('sets the appropriate epoch slot', async () => {
       const blockTimestamp = (await pair.getReserves())[2]
       expect(blockTimestamp).is.closeTo(startTime, 2)
       await slidingWindowOracle.update(token0.address, token1.address, overrides)
@@ -220,7 +218,7 @@ describe.only('IncentivisedSlidingWindowOracle', () => {
     it('gas for first update (allocates empty array)', async () => {
       const tx = await slidingWindowOracle.update(token0.address, token1.address, overrides)
       const receipt = await tx.wait()
-      expect(receipt.gasUsed).to.eq('128153')
+      expect(receipt.gasUsed).to.eq('128225')
     }).retries(2) // gas test inconsistent
 
     it('reverts when second update in the same period', async () => {
