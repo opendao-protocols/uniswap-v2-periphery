@@ -85,7 +85,7 @@ module.exports = {
       provider: providerForNetwork("rinkeby"),
       gas: 6.9e6,
       gasPrice: 15000000001,
-      skipDryRun: false     // Skip dry run before migrations? (default: false for public nets )
+      skipDryRun: false
     },
 
     // Another network with more advanced options...

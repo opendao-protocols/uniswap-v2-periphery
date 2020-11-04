@@ -13,18 +13,22 @@ const IncentivisedSlidingWindowOracle = artifacts.require("IncentivisedSlidingWi
 const FACTORY_ADDRESS = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f" // rinkeby factory address
 const UNISWAP_V2_ROUTER_02 = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D" // rinkeby router
 const INCENTIVISED_PAIR = "" // xdai/hny pair on rinkeby
+const HNY = "0x658BD9EE8788014b3DBf2bf0d66af344d84a5aA1" // rinkeby
+const DAI = "0x848a3752aEcF096B68deb2143714F6b62F899C8e" // rinkeby
 
 const toBn = (value) => new web3.utils.toBN(value)
 const toBnWithDecimals = (x, y = 18) => toBn((toBn(x).mul(toBn(10).pow(toBn(y)))).toString())
 const onePercent = toBnWithDecimals(1, 16)
 
 module.exports = async (deployer) => {
-  await deployer.deploy(ERC20, toBnWithDecimals(10000))
-  const hny = await ERC20.at(ERC20.address)
+  // await deployer.deploy(ERC20, toBnWithDecimals(10000))
+  // const hny = await ERC20.at(ERC20.address)
+  const hny = await ERC20.at(HNY)
   console.log(`Honey: ${hny.address}`)
 
-  await deployer.deploy(ERC20, toBnWithDecimals(100000))
-  const wxdai = await ERC20.at(ERC20.address)
+  // await deployer.deploy(ERC20, toBnWithDecimals(100000))
+  // const wxdai = await ERC20.at(ERC20.address)
+  const wxdai = await ERC20.at(DAI)
   console.log(`xDAI: ${wxdai.address}`)
 
   const uniswapV2Router02 = await UniswapV2Router02.at(UNISWAP_V2_ROUTER_02)
